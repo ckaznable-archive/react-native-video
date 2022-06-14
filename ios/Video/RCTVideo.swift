@@ -631,18 +631,16 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
         
         guard let _playerViewController = _playerViewController else { return }
         
-        if _controls {
-            let viewController:UIViewController! = self.reactViewController()
-            viewController.addChild(_playerViewController)
-            self.addSubview(_playerViewController.view)
-        }
+        let viewController:UIViewController! = self.reactViewController()
+        viewController.addChild(_playerViewController)
+        self.addSubview(_playerViewController.view)
         
         _playerObserver.playerViewController = _playerViewController
     }
     
     func createPlayerViewController(player:AVPlayer, withPlayerItem playerItem:AVPlayerItem) -> RCTVideoPlayerViewController {
         let viewController = RCTVideoPlayerViewController()
-        viewController.showsPlaybackControls = true
+        viewController.showsPlaybackControls = self._controls
         viewController.rctDelegate = self
         viewController.preferredOrientation = _fullscreenOrientation
         
@@ -674,21 +672,10 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
     
     @objc
     func setControls(_ controls:Bool) {
-        if _controls != controls || ((_playerLayer == nil) && (_playerViewController == nil))
-        {
+        if _controls != controls || ((_playerLayer == nil) && (_playerViewController == nil)) {
             _controls = controls
-            if _controls
-            {
-                self.removePlayerLayer()
-                self.usePlayerViewController()
-            }
-            else
-            {
-                _playerViewController?.view.removeFromSuperview()
-                _playerViewController = nil
-                _playerObserver.playerViewController = nil
-                self.usePlayerLayer()
-            }
+            self.removePlayerLayer()
+            self.usePlayerViewController()
         }
     }
     
