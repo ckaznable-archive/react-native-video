@@ -175,7 +175,6 @@ enum RCTPlayerOperations {
         
         return Promise<Bool>(on: .global()) { fulfill, reject in
             guard CMTimeCompare(current, cmSeekTime) != 0 else {
-                reject(NSError())
                 return
             }
             if !paused { player.pause() }
