@@ -1030,6 +1030,7 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
             item.seek(to: CMTime.zero)
             self.applyModifiers()
         } else {
+            self.setPaused(true);
             _playerObserver.removePlayerTimeObserver()
         }
     }
