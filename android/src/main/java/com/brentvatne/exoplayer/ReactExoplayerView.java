@@ -17,6 +17,8 @@ import android.view.accessibility.CaptioningManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 
+import androidx.activity.OnBackPressedCallback;
+
 import com.brentvatne.react.R;
 import com.brentvatne.receiver.AudioBecomingNoisyReceiver;
 import com.brentvatne.receiver.BecomingNoisyListener;
@@ -42,8 +44,9 @@ import com.google.android.exoplayer2.PlaybackParameters;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.Timeline;
-import com.google.android.exoplayer2.TracksInfo;
+import com.google.android.exoplayer2.Tracks;
 import com.google.android.exoplayer2.drm.DefaultDrmSessionManager;
+import com.google.android.exoplayer2.drm.DefaultDrmSessionManagerProvider;
 import com.google.android.exoplayer2.drm.DrmSessionEventListener;
 import com.google.android.exoplayer2.drm.DrmSessionManager;
 import com.google.android.exoplayer2.drm.DrmSessionManagerProvider;
@@ -72,8 +75,8 @@ import com.google.android.exoplayer2.trackselection.AdaptiveTrackSelection;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
 import com.google.android.exoplayer2.trackselection.ExoTrackSelection;
-import com.google.android.exoplayer2.trackselection.TrackSelectionOverrides;
-import com.google.android.exoplayer2.trackselection.TrackSelectionOverrides.TrackSelectionOverride;
+import com.google.android.exoplayer2.trackselection.TrackSelectionParameters;
+import com.google.android.exoplayer2.trackselection.TrackSelectionOverride;
 import com.google.android.exoplayer2.ui.PlayerControlView;
 import com.google.android.exoplayer2.upstream.BandwidthMeter;
 import com.google.android.exoplayer2.upstream.DataSource;
@@ -140,6 +143,7 @@ class ReactExoplayerView extends FrameLayout implements
     private Player.Listener eventListener;
 
     private ExoPlayerView exoPlayerView;
+    private FullScreenPlayerView fullScreenPlayerView;
 
     private DataSource.Factory mediaDataSourceFactory;
     private ExoPlayer player;
@@ -367,7 +371,6 @@ class ReactExoplayerView extends FrameLayout implements
 
         // Setting the player for the playerControlView
         playerControlView.setPlayer(player);
-        playerControlView.show();
         playPauseControlContainer = playerControlView.findViewById(R.id.exo_play_pause_container);
 
         // Invoking onClick event for exoplayerView
@@ -398,6 +401,10 @@ class ReactExoplayerView extends FrameLayout implements
                 setPausedModifier(true);
             }
         });
+
+        //Handling the fullScreenButton click event
+        ImageButton fullScreenButton = playerControlView.findViewById(R.id.exo_fullscreen);
+        fullScreenButton.setOnClickListener(v -> setFullscreen(!isFullscreen));
 
         // Invoking onPlaybackStateChanged and onPlayWhenReadyChanged events for Player
         eventListener = new Player.Listener() {
@@ -441,6 +448,7 @@ class ReactExoplayerView extends FrameLayout implements
             removeViewAt(indexOfPC);
         }
         addView(playerControlView, 1, layoutParams);
+        reLayout(playerControlView);
     }
 
     /**
@@ -568,7 +576,7 @@ class ReactExoplayerView extends FrameLayout implements
 
     private void initializePlayerCore(ReactExoplayerView self) {
         ExoTrackSelection.Factory videoTrackSelectionFactory = new AdaptiveTrackSelection.Factory();
-        self.trackSelector = new DefaultTrackSelector(videoTrackSelectionFactory);
+        self.trackSelector = new DefaultTrackSelector(getContext(), videoTrackSelectionFactory);
         self.trackSelector.setParameters(trackSelector.buildUponParameters()
                 .setMaxVideoBitrate(maxBitRate == 0 ? Integer.MAX_VALUE : maxBitRate));
 
@@ -588,7 +596,7 @@ class ReactExoplayerView extends FrameLayout implements
                 new DefaultRenderersFactory(getContext())
                         .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF);
         player = new ExoPlayer.Builder(getContext(), renderersFactory)
-                    .setTrackSelector​(self.trackSelector)
+                    .setTrackSelector(self.trackSelector)
                     .setBandwidthMeter(bandwidthMeter)
                     .setLoadControl(loadControl)
                     .build();
@@ -664,6 +672,12 @@ class ReactExoplayerView extends FrameLayout implements
         setControls(controls);
         applyModifiers();
         startBufferCheckTimer();
+        fullScreenPlayerView = new FullScreenPlayerView(getContext(), exoPlayerView, playerControlView, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                setFullscreen(false);
+            }
+        });
     }
 
     private DrmSessionManager buildDrmSessionManager(UUID uuid, String licenseUrl, String[] keyRequestPropertiesArray) throws UnsupportedDrmException {
@@ -718,6 +732,8 @@ class ReactExoplayerView extends FrameLayout implements
                     return drmSessionManager;
                 }
             };
+        } else {
+            drmProvider = new DefaultDrmSessionManagerProvider();
         }
         switch (type) {
             case C.TYPE_SS:
@@ -824,7 +840,10 @@ class ReactExoplayerView extends FrameLayout implements
                 player.setPlayWhenReady(true);
             }
         } else {
-            player.setPlayWhenReady(false);
+            // ensure playback is not ENDED, else it will trigger another ended event
+            if (player.getPlaybackState() != Player.STATE_ENDED) {
+                player.setPlayWhenReady(false);
+            }
         }
     }
 
@@ -1280,7 +1299,7 @@ class ReactExoplayerView extends FrameLayout implements
     }
 
     @Override
-    public void onTracksInfoChanged(TracksInfo tracksInfo) {
+    public void onTracksChanged(Tracks tracks) {
         // Do nothing.
     }
 
@@ -1592,10 +1611,10 @@ class ReactExoplayerView extends FrameLayout implements
         TrackSelectionOverride selectionOverride = new TrackSelectionOverride(groups.get(groupIndex), tracks);
 
         DefaultTrackSelector.Parameters selectionParameters = trackSelector.getParameters()
-                .buildUpon()
-                .setRendererDisabled(rendererIndex, false)
-                .setTrackSelectionOverrides(new TrackSelectionOverrides.Builder().addOverride(selectionOverride).build())
-                .build();
+            .buildUpon()
+            .setRendererDisabled(rendererIndex, false)
+            .addOverride(selectionOverride)
+            .build();
         trackSelector.setParameters(selectionParameters);
     }
 
@@ -1754,6 +1773,16 @@ class ReactExoplayerView extends FrameLayout implements
         if (activity == null) {
             return;
         }
+
+        if (fullScreenPlayerView == null) {
+            fullScreenPlayerView = new FullScreenPlayerView(getContext(), exoPlayerView, playerControlView, new OnBackPressedCallback(true) {
+                @Override
+                public void handleOnBackPressed() {
+                    setFullscreen(false);
+                }
+            });
+        }
+
         Window window = activity.getWindow();
         View decorView = window.getDecorView();
         int uiOptions;
@@ -1767,13 +1796,24 @@ class ReactExoplayerView extends FrameLayout implements
                         | SYSTEM_UI_FLAG_FULLSCREEN;
             }
             eventEmitter.fullscreenWillPresent();
-            decorView.setSystemUiVisibility(uiOptions);
-            eventEmitter.fullscreenDidPresent();
+            if (controls) {
+                fullScreenPlayerView.show();
+            }
+            post(() -> {
+                decorView.setSystemUiVisibility(uiOptions);
+                eventEmitter.fullscreenDidPresent();
+            });
         } else {
             uiOptions = View.SYSTEM_UI_FLAG_VISIBLE;
             eventEmitter.fullscreenWillDismiss();
-            decorView.setSystemUiVisibility(uiOptions);
-            eventEmitter.fullscreenDidDismiss();
+            if (controls) {
+                fullScreenPlayerView.dismiss();
+                reLayout(exoPlayerView);
+            }
+            post(() -> {
+                decorView.setSystemUiVisibility(uiOptions);
+                eventEmitter.fullscreenDidDismiss();
+            });
         }
     }
 
@@ -1852,5 +1892,9 @@ class ReactExoplayerView extends FrameLayout implements
                 removeViewAt(indexOfPC);
             }
         }
+    }
+
+    public void setSubtitleStyle(SubtitleStyle style) {
+        exoPlayerView.setSubtitleStyle(style);
     }
 }
