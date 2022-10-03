@@ -330,6 +330,7 @@ class ReactExoplayerView extends FrameLayout implements
     }
 
     public void cleanUpResources() {
+        setPausedModifier(true);
         stopPlayback();
     }
 
@@ -591,7 +592,7 @@ class ReactExoplayerView extends FrameLayout implements
                 bufferForPlaybackMs,
                 bufferForPlaybackAfterRebufferMs,
                 -1,
-                true,
+                false,
                 backBufferDurationMs,
                 DefaultLoadControl.DEFAULT_RETAIN_BACK_BUFFER_FROM_KEYFRAME
         );
