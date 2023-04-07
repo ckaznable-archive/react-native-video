@@ -74,6 +74,17 @@ Video with caching ([more info](docs/caching.md)):
 end
 ```
 
+#### Enable custom feature in podfile file
+
+##### Google IMA
+
+Google IMA is the google SDK to support Client Side Ads Integration (CSAI), see [google documentation](https://developers.google.com/interactive-media-ads/docs/sdks/ios/client-side) for more informations.
+
+To enable google IMA usage define add following line in your podfile:
+```podfile
+$RNVideoUseGoogleIMA=true
+```
+
 </details>
 
 ### tvOS installation
@@ -162,6 +173,21 @@ protected List<ReactPackage> getPackages() {
             new MainReactPackage(),
             new ReactVideoPackage()
     );
+}
+```
+
+#### Enable custom feature in gradle file
+
+##### Enable client side ads insertion
+To enable client side ads insertion CSAI with google IMA SDK, you need to enable it in your gradle file.
+
+```gradle
+buildscript {
+  ext {
+    ...
+    RNVUseExoplayerIMA = true
+    ...
+  }
 }
 ```
 </details>
@@ -320,6 +346,7 @@ var styles = StyleSheet.create({
 | Name                                                                                            | Platforms Support         | 
 |-------------------------------------------------------------------------------------------------|---------------------------|
 | [onAudioBecomingNoisy](#onaudiobecomingnoisy)                                                   | Android, iOS              |
+| [onAudioTracks](#onAudioTracks)                                                                 | Android                   |
 | [onBandwidthUpdate](#onbandwidthupdate)                                                         | Android                   |
 | [onBuffer](#onbuffer)                                                                           | Android, iOS              |
 | [onEnd](#onend)                                                                                 | All                       |
@@ -339,9 +366,11 @@ var styles = StyleSheet.create({
 | [onRestoreUserInterfaceForPictureInPictureStop](#onrestoreuserinterfaceforpictureinpicturestop) | iOS                       |
 | [onSeek](#onseek)                                                                               | Android, iOS, Windows UWP |
 | [onTimedMetadata](#ontimedmetadata)                                                             | Android, iOS              |
+| [onTextTracks](#onTextTracks)                                                                   | Android                   |
+| [onVideoTracks](#onVideoTracks)                                                                 | Android                   |
 
 ### Methods
-| Name |Plateforms Support  | 
+| Name |Platforms Support  | 
 |--|--|
 |[dismissFullscreenPlayer](#dismissfullscreenplayer)|Android, iOS|
 |[presentFullscreenPlayer](#presentfullscreenplayer)|Android, iOS|
@@ -351,7 +380,7 @@ var styles = StyleSheet.create({
 
 ### Static methods
 
-| Name |Plateforms Support  |
+| Name |Platforms Support  |
 |--|--|
 |[getWidevineLevel](#getWidevineLevel)|Android|
 |[isCodecSupported](#isCodecSupported)|Android|
@@ -366,6 +395,9 @@ Example:
 ```
 adTagUrl="https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/vmap_ad_samples&sz=640x480&cust_params=sample_ar%3Dpremidpostoptimizedpodbumper&ciu_szs=300x250&gdfp_req=1&ad_rule=1&output=vmap&unviewed_position_start=1&env=vp&impl=s&cmsid=496&vid=short_onecue&correlator="
 ```
+
+Note: On android, you need enable IMA SDK in gradle file, see: [enableclient side ads insertion](#enable-client-side-ads-insertion)
+
 
 Platforms: Android, iOS
 
@@ -684,6 +716,34 @@ Determine whether to repeat the video when the end is reached
 
 Platforms: all
 
+
+#### onAudioTracks
+Callback function that is called when audio tracks change
+
+Payload:
+
+Property | Type | Description
+--- | --- | ---
+index | number | Internal track ID
+title | string | Descriptive name for the track
+language | string | 2 letter [ISO 639-1 code](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) representing the language
+bitrate | number | bitrate of track
+type | string | Mime type of track
+selected | boolean | true if track is playing
+
+Example:
+```
+{
+  audioTracks: [
+    { language: 'es', title: 'Spanish', type: 'audio/mpeg', index: 0, selected: true },
+    { language: 'en', title: 'English', type: 'audio/mpeg', index: 1 }
+  ],
+}
+```
+
+
+Platforms: Android
+
 #### reportBandwidth
 Determine whether to generate onBandwidthUpdate events. This is needed due to the high frequency of these events on ExoPlayer.
 
@@ -867,11 +927,26 @@ The following other types are supported on some platforms, but aren't fully docu
 `content://, ms-appx://, ms-appdata://, assets-library://`
 
 
+##### Playing only a portion of the video (start & end time)
+
+Provide an optional `startTime` and/or `endTime` for the video. Value is in milliseconds. Useful when you want to play only a portion of a large video.
+
+Example
+```
+source={{ uri: 'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8', startTime: 36012, endTime: 48500 }}
+
+source={{ uri: 'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8', startTime: 36012 }}
+
+source={{ uri: 'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8', endTime: 48500 }}
+```
+
+Platforms: iOS, Android
+
 #### subtitleStyle
 
 Property | Description | Platforms
 --- | --- | ---
-fontSizeTrack | Adjust the font size of the subtitles. Default: font size of the device | Android
+fontSize | Adjust the font size of the subtitles. Default: font size of the device | Android
 paddingTop | Adjust the top padding of the subtitles. Default: 0| Android
 paddingBottom | Adjust the bottom padding of the subtitles. Default: 0| Android
 paddingLeft | Adjust the left padding of the subtitles. Default: 0| Android
@@ -1091,7 +1166,7 @@ Payload:
 
 Property | Type | Description
 --- | --- | ---
-currentPosition | number | Time in seconds where the media will start
+currentTime | number | Time in seconds where the media will start
 duration | number | Length of the media in seconds
 naturalSize | object | Properties:<br> * width - Width in pixels that the video was encoded at<br> * height - Height in pixels that the video was encoded at<br> * orientation - "portrait" or "landscape"
 audioTracks | array | An array of audio track info objects with the following properties:<br> * index - Index number<br> * title - Description of the track<br> * language - 2 letter [ISO 639-1](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) or 3 letter [ISO639-2](https://en.wikipedia.org/wiki/List_of_ISO_639-2_codes) language code<br> * type - Mime type of track
@@ -1346,6 +1421,69 @@ Example:
 ```
 
 Platforms: Android, iOS
+
+#### onTextTracks
+Callback function that is called when text tracks change
+
+Payload:
+
+Property | Type | Description
+--- | --- | ---
+index | number | Internal track ID
+title | string | Descriptive name for the track
+language | string | 2 letter [ISO 639-1 code](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) representing the language
+type | string | Mime type of the track<br> * TextTrackType.SRT - SubRip (.srt)<br> * TextTrackType.TTML - TTML (.ttml)<br> * TextTrackType.VTT - WebVTT (.vtt)<br>iOS only supports VTT, Android supports all 3
+selected | boolean | true if track is playing
+
+
+Example:
+```
+{
+  textTracks: [
+    {
+      index: 0,
+      title: 'Any Time You Like',
+      type: 'srt',
+      selected: true
+    }
+  ]
+}
+```
+
+Platforms: Android
+
+#### onVideoTracks
+Callback function that is called when video tracks change
+
+Payload:
+
+Property | Type | Description
+--- | --- | ---
+trackId | number | Internal track ID
+codecs | string | MimeType of codec used for this track
+width | number | Track width
+height | number | Track height
+bitrate | number | Bitrate in bps
+selected | boolean | true if track is selected for playing
+
+
+Example:
+```
+{
+  videoTracks: [
+    {
+      trackId: 0,
+      codecs: 'video/mp4',
+      width: 1920,
+      height: 1080,
+      bitrate: 10000,
+      selected: true
+    }
+  ]
+}
+```
+
+Platforms: Android
 
 ### Methods
 Methods operate on a ref to the Video element. You can create a ref using code like:
