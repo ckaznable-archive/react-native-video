@@ -28,6 +28,7 @@
 - Fix regression when fullscreen prop is used combined with controls [#2911](https://github.com/react-native-video/react-native-video/pull/2911)
 - Fix: memory leak issue on iOS [#2907](https://github.com/react-native-video/react-native-video/pull/2907)
 - Fix setting text tracks before player is initialized on iOS [#2935](https://github.com/react-native-video/react-native-video/pull/2935)
+- Fix: improve looping on iOS [#2922](https://github.com/react-native-video/react-native-video/pull/2922)
 
 ### Version 6.0.0-alpha.3
 

@@ -10,6 +10,7 @@ import Promises
 class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverHandler {
 
     private var _player:AVPlayer?
+    private var _playerLooper:NSObject? // Since AVPlayerLooper is only available from 10.0
     private var _playerItem:AVPlayerItem?
     private var _source:VideoSource?
     private var _playerBufferEmpty:Bool = true
@@ -244,6 +245,43 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
     }
 
     // MARK: - Player and source
+
+    @objc
+    func setUpPlayer(_ playerItem:AVPlayerItem!) {
+        _playerObserver.player = nil
+        _playerObserver.playerItem = nil
+
+        if #available(iOS 10.0, *) {
+            self._player = AVQueuePlayer(playerItem: playerItem)
+            self._playerItem = playerItem
+            self.setUpLooper(playerItem)
+            self._playerObserver.playerItem = self._playerItem
+            self._playerObserver.player = self._player
+        } else {
+            self._playerItem = playerItem
+            self._playerObserver.playerItem = self._playerItem
+            self._player = self._player ?? AVPlayer()
+            self._playerObserver.player = self._player
+            DispatchQueue.global(qos: .default).async {
+                self._player?.replaceCurrentItem(with: playerItem)
+            }
+        }
+
+        self._player?.actionAtItemEnd = .none
+    }
+
+    @objc
+    func setUpLooper(_ playerItem:AVPlayerItem!) {
+        _playerObserver.playerLooper = nil
+
+        if #available(iOS 10.0, *) {
+            if self._player != nil && playerItem != nil {
+                self._playerLooper = AVPlayerLooper(player: self._player as! AVQueuePlayer, templateItem: playerItem!)
+                self._playerObserver.playerLooper = self._playerLooper
+            }
+        }
+    }
+    
     @objc
     func setSrc(_ source:NSDictionary!) {
         DispatchQueue.global(qos: .default).async {
@@ -256,6 +294,7 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
             self._playerObserver.player = nil
             self._resouceLoaderDelegate = nil
             self._playerObserver.playerItem = nil
+            self._playerObserver.playerLooper = nil
 
             // perform on next run loop, otherwise other passed react-props may not be set
             RCTVideoUtils.delay()
@@ -299,9 +338,6 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
                 }.then{[weak self] (playerItem:AVPlayerItem!) in
                     guard let self = self else {throw  NSError(domain: "", code: 0, userInfo: nil)}
 
-                    self._player?.pause()
-                    self._playerItem = playerItem
-                    self._playerObserver.playerItem = self._playerItem
                     self.setPreferredForwardBufferDuration(self._preferredForwardBufferDuration)
                     self.setPlaybackRange(playerItem, withVideoStart: self._source?.startTime, withVideoEnd: self._source?.endTime)
                     self.setFilter(self._filterName)
@@ -309,11 +345,8 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
                         self._playerItem?.preferredPeakBitRate = Double(maxBitRate)
                     }
 
-                    self._player = self._player ?? AVPlayer()
-                    self._player?.replaceCurrentItem(with: playerItem)
-                    self._playerObserver.player = self._player
+                    self.setUpPlayer(playerItem)
                     self.applyModifiers()
-                    self._player?.actionAtItemEnd = .none
 
                     if #available(iOS 10.0, *) {
                         self.setAutomaticallyWaitsToMinimizeStalling(self._automaticallyWaitsToMinimizeStalling)
@@ -593,6 +626,16 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
     @objc
     func setRepeat(_ `repeat`: Bool) {
         _repeat = `repeat`
+
+        if _playerLooper != nil {
+            if _repeat {
+                if _player?.actionAtItemEnd == .pause {
+                    _player?.actionAtItemEnd = .advance
+                }
+            } else {
+                _player?.actionAtItemEnd = .pause
+            }
+        }
     }
 
 
@@ -902,6 +945,7 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
         _player?.pause()
         _player = nil
         _resouceLoaderDelegate = nil
+        _playerLooper = nil
         _playerObserver.clearPlayer()
 
         self.removePlayerLayer()
@@ -953,6 +997,14 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
         ])
     }
 
+    @available(iOS 10.0, *)
+    func handleLoopStatusChange(changeObject: Any, change:NSKeyValueObservedChange<AVPlayerLooper.Status>) {
+        let looper = _playerLooper as! AVPlayerLooper
+        if looper.status == .ready {
+            _playerObserver.addPlayerLooperItemsObserver()
+        }
+    }
+    
     // When timeMetadata is read the event onTimedMetadata is triggered
     func handleTimeMetadataChange(playerItem:AVPlayerItem, change:NSKeyValueObservedChange<[AVMetadataItem]?>) {
         guard let newValue = change.newValue, let _items = newValue, _items.count > 0 else {
@@ -1132,6 +1184,10 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
         _playbackStalled = true
     }
 
+    @objc func handleLooperItemDidReachEnd(notification:NSNotification!) {
+        onVideoEnd?(["target": reactTag as Any])
+    }
+    
     @objc func handlePlayerItemDidReachEnd(notification:NSNotification!) {
         onVideoEnd?(["target": reactTag as Any])
 #if USE_GOOGLE_IMA
@@ -1139,13 +1195,10 @@ class RCTVideo: UIView, RCTVideoPlayerViewControllerDelegate, RCTPlayerObserverH
             _imaAdsManager.getAdsLoader()?.contentComplete()
         }
 #endif
-        if _repeat {
+        if _repeat && self._playerLooper == nil {
             let item:AVPlayerItem! = notification.object as? AVPlayerItem
             item.seek(to: CMTime.zero, completionHandler: nil)
             self.applyModifiers()
-        } else {
-            self.setPaused(true);
-            _playerObserver.removePlayerTimeObserver()
         }
     }
 
